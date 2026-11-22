@@ -677,6 +677,8 @@ SEED_ROWS: dict[str, list[dict[str, Any]]] = {
   '创建原因': '数据版本样例3',
   '依赖版本': '数据版本样例3',
   '创建时间': '2026-09-03'}],
+    # 快照退役清单：由“发起退役”建立，投递终态由完成回执/废弃申请回写。
+    "snapshot_retirement": [],
     "pipeline_audit": [{'id': 1,
   'status': '已记录',
   'pending': True,

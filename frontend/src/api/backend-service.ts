@@ -59,3 +59,15 @@ export async function loadOverview(): Promise<OverviewResult> {
   if (!response.ok) throw new Error('运营概览读取失败')
   return await response.json()
 }
+
+export async function loadRetirementStatus(versionId: number): Promise<Record<string, unknown>> {
+  const response = await request(`/api/chain/retirement-status/${versionId}`)
+  if (!response.ok) throw new Error('退役清单读取失败')
+  return await response.json()
+}
+
+export async function loadDeliveryNextStep(deliveryId: number): Promise<Record<string, unknown>> {
+  const response = await request(`/api/chain/delivery-next-step/${deliveryId}`)
+  if (!response.ok) throw new Error('投递核定结果读取失败')
+  return await response.json()
+}

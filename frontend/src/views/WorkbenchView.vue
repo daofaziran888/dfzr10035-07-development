@@ -70,6 +70,62 @@
       </tbody>
     </table>
 
+    <!-- 数据版本：退役清单与在途投递核定结果 -->
+    <section v-if="meta.detail === 'retirement'" class="detail-panel" data-testid="retirement-panel">
+      <header class="detail-head">
+        <h3>退役清单</h3>
+        <button class="btn" type="button" data-testid="detail-refresh" @click="loadDetail">刷新退役状态</button>
+      </header>
+      <p v-if="detailHint" class="detail-hint">{{ detailHint }}</p>
+      <template v-if="retirement">
+        <dl class="detail-grid">
+          <div><dt>退役记录</dt><dd data-testid="retirement-id">{{ retirement['记录编号'] }}</dd></div>
+          <div><dt>清单状态</dt><dd>{{ retirement['status'] }}</dd></div>
+          <div><dt>关联投递</dt><dd>{{ retirement['关联投递'] }}</dd></div>
+          <div><dt>待核定</dt><dd>{{ retirement['待核定'] }}</dd></div>
+          <div><dt>已交付</dt><dd>{{ retirement['已交付'] }}</dd></div>
+          <div><dt>已终止</dt><dd>{{ retirement['已终止'] }}</dd></div>
+        </dl>
+        <table class="data-table">
+          <thead>
+            <tr><th>投递ID</th><th>管道编号</th><th>接收方</th><th>清单状态</th><th>投递终态</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="ref in retirementRefs" :key="String(ref['投递ID'])" :data-testid="`ref-${ref['投递ID']}`">
+              <td>{{ ref['投递ID'] }}</td>
+              <td>{{ ref['管道编号'] }}</td>
+              <td>{{ ref['接收方'] }}</td>
+              <td>{{ ref['状态'] }}</td>
+              <td>{{ ref['终态'] || '待核定' }}</td>
+            </tr>
+            <tr v-if="!retirementRefs.length">
+              <td colspan="5" class="empty-state">暂无关联投递</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+    </section>
+
+    <!-- 数据投递：按退役清单核定下一步 + 接班人凭据复核 -->
+    <section v-if="meta.detail === 'delivery_terminal'" class="detail-panel" data-testid="delivery-panel">
+      <header class="detail-head">
+        <h3>核定投递下一步</h3>
+        <label class="detail-inline">
+          投递ID
+          <input v-model="detailId" data-testid="detail-id" placeholder="如 1" />
+        </label>
+        <button class="btn" type="button" data-testid="detail-refresh" @click="loadDetail">核定</button>
+      </header>
+      <p v-if="detailHint" class="detail-hint">{{ detailHint }}</p>
+      <dl v-if="deliveryReview" class="detail-grid">
+        <div><dt>下一步</dt><dd data-testid="delivery-decision">{{ deliveryReview['decision'] ?? '—' }}</dd></div>
+        <div><dt>投递终态</dt><dd>{{ deliveryReview['terminal_state'] || '未结案' }}</dd></div>
+        <div><dt>可否重发</dt><dd>{{ deliveryReview['can_redeliver'] ? '可以' : '不可以' }}</dd></div>
+        <div><dt>采集凭据</dt><dd>{{ deliveryReview['receipt'] || '无' }}</dd></div>
+        <div class="detail-wide"><dt>说明</dt><dd>{{ deliveryReview['message'] }}</dd></div>
+      </dl>
+    </section>
+
     <div v-if="showCreate" class="modal-backdrop" data-testid="create-modal">
       <form class="modal" @submit.prevent="submitCreate">
         <h3>登记{{ meta.entity }}</h3>
@@ -100,6 +156,8 @@ import {
   createEntry,
   downloadEntries,
   listEntries,
+  loadDeliveryNextStep,
+  loadRetirementStatus,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/backend-service'
@@ -115,6 +173,46 @@ const filterFields = meta.fields.slice(0, 3)
 const showCreate = ref(false)
 const creating = ref(false)
 const createValues = ref<Record<string, string>>({})
+
+// 领域明细：退役清单 / 投递核定。
+const detailId = ref('')
+const detailHint = ref('')
+const retirement = ref<Record<string, unknown> | null>(null)
+const retirementRefs = ref<Record<string, unknown>[]>([])
+const deliveryReview = ref<Record<string, unknown> | null>(null)
+
+async function loadDetail() {
+  detailHint.value = ''
+  try {
+    if (meta.detail === 'retirement') {
+      const target = Number(detailId.value || rows.value[0]?.id || 0)
+      if (!target) {
+        detailHint.value = '请先选择一条数据版本，或在投递ID框内填入版本ID'
+        return
+      }
+      detailId.value = String(target)
+      const payload = await loadRetirementStatus(target)
+      const record = payload.retirement as Record<string, unknown> | null
+      retirement.value = record
+      retirementRefs.value = (record?.投递引用 as Record<string, unknown>[]) ?? []
+      detailHint.value = String(payload.message ?? '')
+    } else if (meta.detail === 'delivery_terminal') {
+      const target = Number(detailId.value || rows.value[0]?.id || 0)
+      if (!target) {
+        detailHint.value = '请先选择一条投递管道，或填入投递ID'
+        return
+      }
+      detailId.value = String(target)
+      const payload = await loadDeliveryNextStep(target)
+      deliveryReview.value = {
+        ...(payload.next as Record<string, unknown>),
+        ...(payload.credentials as Record<string, unknown>),
+      }
+    }
+  } catch (error) {
+    detailHint.value = error instanceof Error ? error.message : '明细读取失败'
+  }
+}
 const stats = computed(() => [
   { label: meta.metrics[0], value: total.value },
   { label: meta.metrics[1], value: rows.value.filter((row) => row.status === meta.statuses[1]).length },
@@ -187,5 +285,10 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+onMounted(() => {
+  void reload().then(() => {
+    if (meta.detail) void loadDetail()
+  })
+})
+
 </script>

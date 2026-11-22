@@ -31,6 +31,13 @@ def health() -> dict[str, object]:
     return {"ok": True, "app": settings.app_name, "modules": len(store.module_names())}
 
 
+@app.post("/api/maintenance/reset")
+def reset_demo_data() -> dict[str, object]:
+    """演示/验收前把内存数据恢复成种子状态；生产部署不会挂这个开关。"""
+    store.reset()
+    return {"ok": True, "message": "示例数据已重置", "modules": len(store.module_names())}
+
+
 @app.get("/api/overview")
 def overview() -> dict[str, object]:
     """运营概览：把各业务模块的待处理量汇总成看板卡片。"""
@@ -146,9 +153,30 @@ def chain_audit_trail():
 
 @app.get("/api/chain/version-lineage")
 def chain_version_lineage(source: str):
-    """链路16：版本谱系（跨 data_version/data_delivery/subscriber）"""
+    """链路16：版本谱系（跨 data_version/data_delivery/subscriber/快照退役清单）"""
     from app.services.data_version import DataVersionService
     return DataVersionService().check_version_lineage(source)
+
+
+@app.get("/api/chain/retirement-status/{version_id}")
+def chain_retirement_status(version_id: int):
+    """链路16b：快照退役进度（data_version/snapshot_retirement/data_delivery/subscriber）"""
+    from app.services.data_version import DataVersionService
+    return DataVersionService().retirement_status(version_id)
+
+
+@app.get("/api/chain/delivery-next-step/{delivery_id}")
+def chain_delivery_next_step(delivery_id: int):
+    """链路16c：投递按退役清单核定下一步 + 接班人凭据复核"""
+    from app.services.data_delivery import DataDeliveryService
+    return DataDeliveryService().next_step(delivery_id)
+
+
+@app.get("/api/chain/retirement-balance/{retirement_id}")
+def chain_retirement_balance(retirement_id: int):
+    """链路16d：按退役清单逐笔核定在途任务（snapshot_retirement/data_delivery/data_version）"""
+    from app.services.snapshot_retirement import SnapshotRetirementService
+    return SnapshotRetirementService().balance(retirement_id)
 
 
 @app.get("/api/chain/incremental-health")

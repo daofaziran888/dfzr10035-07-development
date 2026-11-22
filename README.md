@@ -66,6 +66,7 @@ npm run dev
 | 传输加密 | `data_encrypt` | 加密配置 | 配置编号、数据范围、加密算法 |
 | 调用日志 | `call_log` | 调用记录 | 记录编号、接口端点、请求参数 |
 | 数据版本 | `data_version` | 数据快照 | 版本编号、数据来源、行数统计 |
+| 快照退役 | `snapshot_retirement` | 快照退役记录 | 记录编号、版本编号、待核定、已交付 |
 | 管道审计 | `pipeline_audit` | 审计记录 | 记录编号、管道名称、操作人 |
 | 治理报告 | `govern_report` | 治理报告 | 报告编号、评估范围、合规指标 |
 | 增量追踪 | `incr_tracker` | 增量标记 | 标记编号、目标端点、增量字段 |
@@ -80,6 +81,26 @@ npm run dev
   `frontend/src/domain/<模块>.ts`，用于承载真实业务差异并维持36题位容量。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 快照退役与投递终态
+
+数据版本退役时不再只有一个“已废弃”状态，而是走一条可追溯的退役链：
+
+1. **领用**：投递登记时填 `投递版本`（数据版本的版本编号），“启动投递”会校验版本可领用
+   并写入 `投递领用`；退役中的版本拒绝领用。
+2. **发起退役**（`data_version` 动作）：快照进入 `退役中`，冻结新领用，把引用这一版的
+   投递全部关联到 **快照退役记录**（`snapshot_retirement`），统计 `待核定/已交付/已终止`。
+3. **单终态**：投递的 `提交完成回执` 与 `申请废弃` 是竞争事件，先到者落 `投递终态`
+   （`已交付` / `已终止`）；后到者只写 `竞争说明`，不覆盖既有 `投递回执`。并发经
+   `app/services/concurrency.py` 的领域锁串行化。
+4. **结案**（`废弃版本` / `完成退役`）：快照进入 `已退役`，退役记录结案并写一条审计。
+   重复结案只累计 `重试次数`，不重复建单、不重复审计。
+5. **核定与复核**：`GET /api/chain/delivery-next-step/{id}` 按退役清单给出下一步；
+   `GET /api/chain/retirement-status/{version_id}` 看清单进度；
+   `GET /api/chain/retirement-balance/{retirement_id}` 逐笔核定在途任务。
+
+相关验收脚本：`backend/tests/test_snapshot_retirement.py`（纯标准库，直接
+`cd backend && .venv/bin/python tests/test_snapshot_retirement.py`）。
 
 领域：数据工程
 子方向：数据采集、爬虫与RPA

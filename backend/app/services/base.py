@@ -10,6 +10,8 @@ class BaseModuleService:
     MODULE = ""
     ENTITY = ""
     LIST_FIELDS: list[str] = []
+    # 不在列表里展示、但需要由登记接口写入的领域字段（如投递领用的快照版本）。
+    EXTRA_FIELDS: list[str] = []
     REQUIRED_FIELDS: list[str] = []
     STATUS_ORDER: list[str] = []
     ACTION_RULES: dict[str, str] = {}
@@ -52,7 +54,9 @@ class BaseModuleService:
             return None, missing
         rows = store.rows(self.MODULE)
         entry = {"id": max((int(row.get("id", 0)) for row in rows), default=0) + 1}
-        entry.update({field: values.get(field) for field in self.LIST_FIELDS})
+        for field in [*self.LIST_FIELDS, *self.EXTRA_FIELDS]:
+            if field in values:
+                entry[field] = values.get(field)
         entry["status"] = self.STATUS_ORDER[0]
         entry["pending"] = True
         entry["abnormal"] = False

@@ -18,6 +18,8 @@ export type ModuleMeta = {
   actions: string[]
   actionTargets: Record<string, string>
   metrics: string[]
+  // 工作台里按模块追加的领域明细面板（退役清单 / 投递终态 / 凭据复核）。
+  detail?: 'retirement' | 'delivery_terminal'
 }
 
 export type PageResult = {
